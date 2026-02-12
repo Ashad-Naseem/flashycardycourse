@@ -1,0 +1,56 @@
+---
+description: shadcn/ui component library standards and setup
+alwaysApply: true
+---
+
+# shadcn/ui Standards
+
+This project uses **shadcn/ui** for all UI components.
+
+## Setup Commands
+
+### Initialize shadcn/ui (if not already set up)
+```bash
+npx shadcn@latest init
+```
+
+### Add specific components as needed
+```bash
+npx shadcn@latest add button
+npx shadcn@latest add card
+npx shadcn@latest add input
+```
+
+## Usage Guidelines
+
+- **Always use shadcn/ui components** instead of custom UI elements
+- Check if a component exists in shadcn/ui before creating custom components
+- Install missing components using the `npx shadcn@latest add [component]` command
+- Components are installed to `src/components/ui/` and can be imported directly
+
+## Example
+
+```tsx
+// ✅ GOOD - Use shadcn/ui components
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+
+export function MyComponent() {
+  return (
+    <Card>
+      <Button>Click me</Button>
+    </Card>
+  )
+}
+
+// ❌ AVOID - Creating custom UI from scratch
+export function MyComponent() {
+  return (
+    <div className="border rounded p-4">
+      <button className="bg-blue-500 text-white px-4 py-2">
+        Click me
+      </button>
+    </div>
+  )
+}
+```
