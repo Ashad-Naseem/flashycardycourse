@@ -1,0 +1,168 @@
+---
+description: Data handling patterns - server components, server actions, and Zod validation
+alwaysApply: true
+---
+
+# Data Handling Patterns
+
+All data operations must follow these architectural patterns for consistency and type safety.
+
+## Data Retrieval - Server Components Only
+
+Data fetching must be done in Server Components, never in Client Components or API routes for initial page loads.
+
+```typescript
+// ✅ GOOD - Server Component data fetching
+import { auth } from "@clerk/nextjs";
+import { getUserDecks } from "@/db/queries";
+
+export default async function DashboardPage() {
+  const { userId } = auth();
+  if (!userId) redirect("/sign-in");
+  
+  const decks = await getUserDecks(userId);
+  
+  return <div>{/* Render decks */}</div>;
+}
+
+// ❌ BAD - Client Component data fetching
+"use client";
+import { useEffect, useState } from "react";
+
+export default function DashboardPage() {
+  const [decks, setDecks] = useState([]);
+  
+  useEffect(() => {
+    fetch('/api/decks').then(/* ... */); // Avoid for initial loads
+  }, []);
+}
+```
+
+## Database Mutations - Server Actions Only
+
+All database updates, deletes, and inserts must use Server Actions, never API routes.
+
+```typescript
+// ✅ GOOD - Server Action for mutations
+"use server";
+
+import { z } from "zod";
+import { auth } from "@clerk/nextjs";
+import { createDeck } from "@/db/mutations";
+
+const CreateDeckSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional()
+});
+
+export async function createDeckAction(data: z.infer<typeof CreateDeckSchema>) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+  
+  const validatedData = CreateDeckSchema.parse(data);
+  
+  return await createDeck(userId, validatedData);
+}
+
+// ❌ BAD - API route for mutations
+export async function POST(request: Request) {
+  const data = await request.json();
+  // Don't use API routes for database mutations
+}
+```
+
+## Data Validation - Always Use Zod
+
+All data must be validated using Zod schemas before processing.
+
+```typescript
+// ✅ GOOD - Zod validation with TypeScript types
+import { z } from "zod";
+
+const UpdateCardSchema = z.object({
+  id: z.string(),
+  question: z.string().min(1),
+  answer: z.string().min(1),
+  difficulty: z.enum(["easy", "medium", "hard"]).optional()
+});
+
+type UpdateCardData = z.infer<typeof UpdateCardSchema>;
+
+export async function updateCardAction(data: UpdateCardData) {
+  const validatedData = UpdateCardSchema.parse(data);
+  // Process validated data...
+}
+
+// ❌ BAD - No validation or FormData types
+export async function updateCardAction(formData: FormData) {
+  const question = formData.get("question"); // Unvalidated, any type
+  // Process without validation...
+}
+```
+
+## Server Action TypeScript Patterns
+
+Server Actions must use proper TypeScript types, never FormData as the parameter type.
+
+```typescript
+// ✅ GOOD - Typed server action parameters
+const DeleteDeckSchema = z.object({
+  deckId: z.string()
+});
+
+export async function deleteDeckAction(data: z.infer<typeof DeleteDeckSchema>) {
+  const { deckId } = DeleteDeckSchema.parse(data);
+  // Process with type safety...
+}
+
+// ❌ BAD - FormData parameter type
+export async function deleteDeckAction(formData: FormData) {
+  const deckId = formData.get("deckId"); // string | File | null - not type safe
+}
+```
+
+## Complete Pattern Example
+
+```typescript
+// Schema definition
+const CreateCardSchema = z.object({
+  deckId: z.string(),
+  question: z.string().min(1, "Question is required"),
+  answer: z.string().min(1, "Answer is required")
+});
+
+type CreateCardData = z.infer<typeof CreateCardSchema>;
+
+// Server Action
+"use server";
+export async function createCardAction(data: CreateCardData) {
+  const { userId } = auth();
+  if (!userId) throw new Error("Unauthorized");
+  
+  const validatedData = CreateCardSchema.parse(data);
+  
+  return await createCard(userId, validatedData);
+}
+
+// Server Component usage
+export default async function DeckPage({ params }: { params: { id: string } }) {
+  const deck = await getDeck(params.id);
+  
+  return (
+    <div>
+      <CreateCardForm 
+        deckId={params.id}
+        action={createCardAction}
+      />
+    </div>
+  );
+}
+```
+
+## Rules Summary
+
+1. **Data Retrieval**: Server Components only
+2. **Database Mutations**: Server Actions only (never API routes)
+3. **Validation**: Always use Zod schemas
+4. **Types**: Server Actions use TypeScript types, never FormData
+5. **Schema Pattern**: Define schema → infer type → validate in action

@@ -1,8 +1,6 @@
 ---
-description: shadcn/ui component library standards and setup
 alwaysApply: true
 ---
-
 # shadcn/ui Standards
 
 This project uses **shadcn/ui** for all UI components.

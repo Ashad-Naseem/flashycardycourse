@@ -1,0 +1,91 @@
+---
+alwaysApply: true
+---
+# Drizzle Database Standards
+
+All database interactions must use the Drizzle schema and queries. Never use raw SQL or other database access methods.
+
+## Required Imports
+
+```typescript
+// ✅ GOOD - Import from your schema
+import { decks, cards } from "@/db/schema";
+import { db } from "@/db";
+import { eq, and, desc } from "drizzle-orm";
+```
+
+## Database Operations
+
+### Querying Data
+
+```typescript
+// ✅ GOOD - Use Drizzle queries with schema
+const userDecks = await db
+  .select()
+  .from(decks)
+  .where(eq(decks.userId, userId))
+  .orderBy(desc(decks.createdAt));
+
+const deckWithCards = await db
+  .select()
+  .from(decks)
+  .leftJoin(cards, eq(decks.id, cards.deckId))
+  .where(eq(decks.id, deckId));
+
+// ❌ BAD - Raw SQL queries
+const userDecks = await db.execute('SELECT * FROM decks WHERE user_id = ?', [userId]);
+```
+
+### Inserting Data
+
+```typescript
+// ✅ GOOD - Use Drizzle insert with schema
+const newDeck = await db
+  .insert(decks)
+  .values({
+    userId,
+    name: "New Deck",
+    description: "Learning materials"
+  })
+  .returning();
+
+// ❌ BAD - Raw insert statements
+await db.execute('INSERT INTO decks (user_id, name) VALUES (?, ?)', [userId, name]);
+```
+
+### Updating Data
+
+```typescript
+// ✅ GOOD - Use Drizzle update with schema
+await db
+  .update(decks)
+  .set({ 
+    name: "Updated Name",
+    updatedAt: new Date()
+  })
+  .where(eq(decks.id, deckId));
+
+// ❌ BAD - Raw update statements
+await db.execute('UPDATE decks SET name = ? WHERE id = ?', [name, deckId]);
+```
+
+### Deleting Data
+
+```typescript
+// ✅ GOOD - Use Drizzle delete with schema
+await db
+  .delete(cards)
+  .where(eq(cards.deckId, deckId));
+
+// ❌ BAD - Raw delete statements  
+await db.execute('DELETE FROM cards WHERE deck_id = ?', [deckId]);
+```
+
+## Schema Reference
+
+Current tables:
+- `decks` - User flashcard decks
+- `cards` - Individual flashcards within decks
+
+Always reference the schema file for available columns and relationships:
+`src/db/schema.ts`

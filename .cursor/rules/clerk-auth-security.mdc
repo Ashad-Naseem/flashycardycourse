@@ -1,0 +1,113 @@
+---
+alwaysApply: true
+---
+# Clerk Authentication & Data Security
+
+All authentication is handled by **Clerk**. Users must only access their own data.
+
+## Authentication Patterns
+
+### API Routes - Always Require Auth
+
+```typescript
+// ✅ GOOD - Proper auth check
+import { auth } from "@clerk/nextjs";
+
+export async function GET() {
+  const { userId } = auth();
+  
+  if (!userId) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  
+  // Only fetch data belonging to this user
+  const data = await getUserData(userId);
+  return Response.json(data);
+}
+
+// ❌ BAD - No auth check
+export async function GET() {
+  const allData = await getAllData(); // Exposes other users' data!
+  return Response.json(allData);
+}
+```
+
+### Server Components - Use `auth()`
+
+```typescript
+// ✅ GOOD - Server component with auth
+import { auth } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
+
+export default async function DashboardPage() {
+  const { userId } = auth();
+  
+  if (!userId) {
+    redirect("/sign-in");
+  }
+  
+  const userCards = await getUserFlashcards(userId);
+  return <div>{/* Render user's cards */}</div>;
+}
+```
+
+### Database Queries - Always Filter by User
+
+```typescript
+// ✅ GOOD - User-scoped queries
+export async function getUserFlashcards(userId: string) {
+  return await db.select()
+    .from(flashcards)
+    .where(eq(flashcards.userId, userId));
+}
+
+export async function updateFlashcard(cardId: string, userId: string, data: any) {
+  // Verify ownership before updating
+  return await db.update(flashcards)
+    .set(data)
+    .where(and(
+      eq(flashcards.id, cardId),
+      eq(flashcards.userId, userId) // Critical: ensure user owns this card
+    ));
+}
+
+// ❌ BAD - Queries without user filtering
+export async function getFlashcard(cardId: string) {
+  return await db.select().from(flashcards).where(eq(flashcards.id, cardId));
+  // Missing userId check - any user could access any card!
+}
+```
+
+### Middleware - Protect Routes
+
+```typescript
+// ✅ GOOD - Middleware protecting user routes
+import { authMiddleware } from "@clerk/nextjs";
+
+export default authMiddleware({
+  publicRoutes: ["/", "/sign-in", "/sign-up"],
+  ignoredRoutes: ["/api/public"]
+});
+```
+
+## Security Rules
+
+1. **Never expose other users' data** - Always filter by `userId`
+2. **Always verify ownership** - Before updating/deleting, check the resource belongs to the user  
+3. **Use Clerk's auth helpers** - Don't build custom auth
+4. **Protect all API routes** - No unauthenticated data access
+5. **Server-side auth only** - Never rely on client-side auth checks for data security
+
+## Database Schema
+
+All user data tables must include `userId`:
+
+```typescript
+// ✅ GOOD - Schema with user relationship
+export const flashcards = pgTable("flashcards", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 256 }).notNull(), // Clerk user ID
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+});
+```
