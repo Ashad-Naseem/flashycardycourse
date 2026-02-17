@@ -1,0 +1,213 @@
+---
+alwaysApply: true
+---
+# Vercel AI Library Standards
+
+This project uses the **Vercel AI npm library** (`ai` package) for AI features, specifically AI flashcard generation. All AI functionality must follow these patterns.
+
+## Required Imports
+
+```typescript
+// ✅ REQUIRED - Core Vercel AI imports
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+```
+
+## Flashcard Generation Pattern
+
+**MANDATORY**: Use structured output with Zod schemas for generating flashcard arrays.
+
+```typescript
+// ✅ GOOD - Flashcard generation with structured output
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const FlashcardSchema = z.object({
+  front: z.string().min(1, "Front content is required"),
+  back: z.string().min(1, "Back content is required")
+});
+
+const FlashcardArraySchema = z.object({
+  flashcards: z.array(FlashcardSchema).min(1, "At least one flashcard required")
+});
+
+export async function generateFlashcards(topic: string, count: number = 5) {
+  const { output } = await generateText({
+    model: openai("gpt-4o-mini"), // Use cost-effective model
+    output: Output.object({
+      schema: FlashcardArraySchema,
+    }),
+    prompt: `Generate ${count} flashcards for learning about "${topic}". 
+             Each flashcard should have:
+             - front: A clear question or prompt
+             - back: A comprehensive answer or explanation
+             
+             Make the content educational and appropriate for study purposes.`,
+  });
+
+  return output.flashcards;
+}
+
+// ❌ BAD - No structured output, unreliable parsing
+export async function generateFlashcards(topic: string) {
+  const response = await generateText({
+    model: openai("gpt-4o-mini"),
+    prompt: "Generate flashcards for " + topic,
+  });
+  
+  return JSON.parse(response.text); // Unreliable, no validation
+}
+```
+
+## Server Action Integration
+
+AI generation must be implemented as Server Actions with proper error handling and validation.
+
+```typescript
+// ✅ GOOD - Server Action with AI generation
+"use server";
+
+import { z } from "zod";
+import { auth } from "@clerk/nextjs";
+import { generateFlashcards } from "@/lib/ai/flashcard-generation";
+import { createCard } from "@/db/queries/cards";
+
+const GenerateCardsSchema = z.object({
+  deckId: z.string(),
+  topic: z.string().min(1, "Topic is required"),
+  count: z.number().min(1).max(20).default(5)
+});
+
+export async function generateCardsAction(data: z.infer<typeof GenerateCardsSchema>) {
+  const { userId, has } = auth();
+  if (!userId) throw new Error("Unauthorized");
+  
+  // Check Pro plan requirement
+  const hasAIGeneration = has({ feature: "ai_flashcard_generation" });
+  if (!hasAIGeneration) {
+    throw new Error("AI flashcard generation requires a Pro subscription.");
+  }
+  
+  const { deckId, topic, count } = GenerateCardsSchema.parse(data);
+  
+  try {
+    // Generate using Vercel AI
+    const generatedCards = await generateFlashcards(topic, count);
+    
+    // Save to database using helper functions
+    const results = [];
+    for (const card of generatedCards) {
+      const newCard = await createCard(userId, {
+        deckId,
+        question: card.front,
+        answer: card.back,
+        difficulty: 'medium'
+      });
+      results.push(newCard);
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('AI generation failed:', error);
+    throw new Error("Failed to generate flashcards. Please try again.");
+  }
+}
+```
+
+## Error Handling & Rate Limiting
+
+Always handle AI generation failures gracefully with user-friendly messages.
+
+```typescript
+// ✅ GOOD - Robust error handling
+export async function generateFlashcards(topic: string, count: number = 5) {
+  try {
+    const { output } = await generateText({
+      model: openai("gpt-4o-mini"),
+      output: Output.object({
+        schema: FlashcardArraySchema,
+      }),
+      prompt: `Generate ${count} flashcards for "${topic}"...`,
+      maxRetries: 2, // Built-in retry mechanism
+    });
+
+    // Validate output meets minimum quality
+    if (output.flashcards.length < Math.min(count, 1)) {
+      throw new Error("Generated insufficient flashcards");
+    }
+
+    return output.flashcards;
+  } catch (error) {
+    console.error('Flashcard generation error:', error);
+    
+    if (error.message?.includes('rate limit')) {
+      throw new Error("AI service is temporarily unavailable. Please try again in a few minutes.");
+    }
+    
+    if (error.message?.includes('content policy')) {
+      throw new Error("Unable to generate content for this topic. Please try a different subject.");
+    }
+    
+    throw new Error("Failed to generate flashcards. Please try again.");
+  }
+}
+```
+
+## Model Configuration
+
+Use cost-effective models for flashcard generation while maintaining quality.
+
+```typescript
+// ✅ GOOD - Cost-effective model selection
+const model = openai("gpt-4o-mini"); // Preferred for flashcard generation
+
+// ✅ ALTERNATIVE - For complex topics requiring higher quality
+const model = openai("gpt-4o"); // Use sparingly, more expensive
+
+// ❌ BAD - Expensive models for simple tasks
+const model = openai("gpt-4-turbo"); // Avoid unless specifically needed
+```
+
+## Prompt Engineering Best Practices
+
+Structure prompts for consistent, high-quality flashcard output.
+
+```typescript
+// ✅ GOOD - Well-structured prompt
+const prompt = `Generate ${count} educational flashcards for "${topic}".
+
+Requirements:
+- Front: Clear, specific questions or prompts
+- Back: Comprehensive answers with explanations
+- Focus on key concepts and important details
+- Use active learning techniques
+- Appropriate difficulty level for studying
+
+Format each flashcard for effective learning and retention.`;
+
+// ❌ BAD - Vague prompt
+const prompt = `Make flashcards about ${topic}`;
+```
+
+## Rules Summary
+
+1. **Structured Output**: Always use `Output.object()` with Zod schemas
+2. **Server Actions**: Implement AI generation in Server Actions only
+3. **Error Handling**: Provide user-friendly error messages
+4. **Model Selection**: Use `gpt-4o-mini` for cost efficiency
+5. **Billing Protection**: Check Pro plan access before AI calls
+6. **Validation**: Validate both input and output data
+7. **Retry Logic**: Use built-in retry mechanisms for reliability
+8. **Quality Control**: Ensure generated content meets minimum standards
+
+## Enforcement Checklist
+
+- ✅ Uses `generateText` and `Output.object()` from 'ai' package
+- ✅ Defines Zod schemas for flashcard structure
+- ✅ Implements as Server Action with auth/billing checks
+- ✅ Handles errors gracefully with user-friendly messages
+- ✅ Uses cost-effective OpenAI models
+- ✅ Validates generated content quality
+- ✅ Integrates with existing db/queries pattern

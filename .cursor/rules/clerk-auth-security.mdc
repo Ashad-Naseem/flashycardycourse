@@ -32,10 +32,12 @@ export async function GET() {
 }
 ```
 
-### Server Components - Use `auth()`
+### Server Components - Use `auth()` and Redirect to Homepage
+
+**IMPORTANT**: This app does NOT have a separate sign-in page. All authentication happens on the homepage ("/") where sign-in and sign-up buttons are available.
 
 ```typescript
-// ✅ GOOD - Server component with auth
+// ✅ GOOD - Server component with auth, redirects to homepage
 import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 
@@ -43,11 +45,16 @@ export default async function DashboardPage() {
   const { userId } = auth();
   
   if (!userId) {
-    redirect("/sign-in");
+    redirect("/"); // Redirect to homepage where sign-in/sign-up buttons are available
   }
   
   const userCards = await getUserFlashcards(userId);
   return <div>{/* Render user's cards */}</div>;
+}
+
+// ❌ BAD - Redirecting to non-existent sign-in page
+if (!userId) {
+  redirect("/sign-in"); // This page doesn't exist in this app!
 }
 ```
 
@@ -85,7 +92,7 @@ export async function getFlashcard(cardId: string) {
 import { authMiddleware } from "@clerk/nextjs";
 
 export default authMiddleware({
-  publicRoutes: ["/", "/sign-in", "/sign-up"],
+  publicRoutes: ["/"], // Homepage contains both sign-in and sign-up functionality
   ignoredRoutes: ["/api/public"]
 });
 ```
@@ -97,6 +104,7 @@ export default authMiddleware({
 3. **Use Clerk's auth helpers** - Don't build custom auth
 4. **Protect all API routes** - No unauthenticated data access
 5. **Server-side auth only** - Never rely on client-side auth checks for data security
+6. **Redirect to homepage only** - When auth fails, always `redirect("/")` - never redirect to "/sign-in" (doesn't exist)
 
 ## Database Schema
 

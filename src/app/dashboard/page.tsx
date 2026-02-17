@@ -1,203 +1,154 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { getUserDecks } from "@/db/queries/decks";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  BookOpen, 
-  Clock, 
-  Target, 
-  TrendingUp, 
-  Plus,
-  Brain,
-  Trophy,
-  Calendar
-} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Protect } from "@clerk/nextjs";
+import Link from "next/link";
+import { BookOpen, Shield } from "lucide-react";
+import { CreateDeckDialog } from "@/components/create-deck-dialog";
 
-export default async function DashboardPage() {
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/sign-in");
+// Prominent deck limit alert banner
+function DeckLimitAlert() {
+  return (
+    <Alert className="bg-slate-900 text-white border-slate-700 mb-8">
+      <Shield className="h-4 w-4" />
+      <AlertDescription className="flex items-center justify-between">
+        <div>
+          <span className="font-medium">You&apos;ve reached the limit of 3 decks on the free plan.</span>
+          <Button 
+            variant="link" 
+            size="sm" 
+            className="text-blue-400 hover:text-blue-300 p-0 ml-2 h-auto"
+            asChild
+          >
+            <Link href="/pricing">Upgrade to Pro</Link>
+          </Button>
+          <span className="ml-1">to create unlimited decks.</span>
+        </div>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+// Plan status and deck counter for header
+function PlanStatus({ currentCount, hasUnlimitedDecks, hasProPlan }: { 
+  currentCount: number; 
+  hasUnlimitedDecks: boolean;
+  hasProPlan: boolean;
+}) {
+  if (hasProPlan) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant="default" className="bg-green-600 text-white">
+          Pro Plan
+        </Badge>
+        <span className="text-sm text-muted-foreground">
+          {currentCount} deck{currentCount !== 1 ? 's' : ''}
+        </span>
+      </div>
+    );
   }
 
-  // Mock data - in a real app, this would come from your database
-  const stats = {
-    totalCards: 156,
-    studiedToday: 23,
-    streakDays: 7,
-    accuracy: 87,
-    totalDecks: 12,
-    weeklyGoal: 150,
-    weeklyProgress: 89
-  };
-
-  const recentActivity = [
-    { id: 1, action: "Completed", deck: "Spanish Vocabulary", score: 92, time: "2 hours ago" },
-    { id: 2, action: "Created", deck: "React Hooks", score: null, time: "5 hours ago" },
-    { id: 3, action: "Studied", deck: "Math Formulas", score: 78, time: "1 day ago" },
-    { id: 4, action: "Completed", deck: "History Facts", score: 95, time: "2 days ago" },
-  ];
-
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Welcome back to your Dashboard
-          </h1>
-          <p className="text-muted-foreground">
-            Track your learning progress and manage your flashcard decks
-          </p>
+    <div className="flex items-center gap-2">
+      <Badge variant="outline">Free Plan</Badge>
+      <span className="text-sm text-muted-foreground">{currentCount}/3 decks</span>
+    </div>
+  );
+}
+
+export default async function DashboardPage() {
+  const { userId, has } = await auth();
+  
+  if (!userId) {
+    redirect("/");
+  }
+  
+  const userDecks = await getUserDecks(userId);
+  const hasUnlimitedDecks = has({ feature: "unlimited_decks" });
+  const hasProPlan = has({ plan: "pro" });
+  const isAtDeckLimit = !hasUnlimitedDecks && userDecks.length >= 3;
+  
+  return (
+    <div className="container mx-auto py-8">
+      <div className="space-y-8">
+        {/* Header Section */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Manage your flashcard decks and study progress
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <PlanStatus 
+              currentCount={userDecks.length} 
+              hasUnlimitedDecks={hasUnlimitedDecks}
+              hasProPlan={hasProPlan}
+            />
+            <Protect
+              feature="unlimited_decks"
+              fallback={
+                isAtDeckLimit ? (
+                  <Button disabled variant="outline">
+                    Create Deck
+                  </Button>
+                ) : (
+                  <CreateDeckDialog />
+                )
+              }
+            >
+              <CreateDeckDialog />
+            </Protect>
+          </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Cards</CardTitle>
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalCards}</div>
-              <p className="text-xs text-muted-foreground">+12 from last week</p>
-            </CardContent>
-          </Card>
+        {/* Deck Limit Alert Banner */}
+        {isAtDeckLimit && (
+          <DeckLimitAlert />
+        )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Studied Today</CardTitle>
-              <Brain className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.studiedToday}</div>
-              <p className="text-xs text-muted-foreground">Great progress!</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Current Streak</CardTitle>
-              <Trophy className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.streakDays}</div>
-              <p className="text-xs text-muted-foreground">days in a row</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Accuracy</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.accuracy}%</div>
-              <p className="text-xs text-muted-foreground">+5% from last week</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Weekly Progress */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Weekly Progress
-              </CardTitle>
-              <CardDescription>
-                You've studied {stats.weeklyProgress} out of {stats.weeklyGoal} cards this week
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Progress value={(stats.weeklyProgress / stats.weeklyGoal) * 100} className="w-full" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>{stats.weeklyProgress} cards</span>
-                <span>{stats.weeklyGoal - stats.weeklyProgress} remaining</span>
-              </div>
-              <div className="grid grid-cols-7 gap-2 mt-4">
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
-                  <div key={day} className="text-center">
-                    <div className="text-xs text-muted-foreground mb-1">{day}</div>
-                    <div className={`h-8 rounded-sm ${
-                      index < 4 ? 'bg-primary' : index === 4 ? 'bg-primary/60' : 'bg-muted'
-                    }`} />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Jump into your learning</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button className="w-full justify-start" variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Create New Deck
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <BookOpen className="h-4 w-4 mr-2" />
-                Study Random Cards
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Review Difficult Cards
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <Clock className="h-4 w-4 mr-2" />
-                Continue Last Session
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Activity */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Your latest study sessions and achievements</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div key={activity.id}>
-                  <div className="flex items-center space-x-4">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback>
-                        {activity.action === 'Completed' ? '✓' : activity.action === 'Created' ? '+' : '📚'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <p className="text-sm font-medium leading-none">
-                          {activity.action} <span className="font-normal">{activity.deck}</span>
-                        </p>
-                        {activity.score && (
-                          <Badge variant={activity.score >= 90 ? "default" : activity.score >= 70 ? "secondary" : "destructive"}>
-                            {activity.score}%
-                          </Badge>
-                        )}
+        {/* Decks Section */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Your Decks</h2>
+          
+          {userDecks.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No decks yet</h3>
+                <p className="text-muted-foreground text-center mb-4">
+                  Create your first flashcard deck to start learning
+                </p>
+                <CreateDeckDialog>Create Your First Deck</CreateDeckDialog>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {userDecks.map((deck) => (
+                <Link key={deck.id} href={`/decks/${deck.id}`}>
+                  <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                    <CardHeader>
+                      <CardTitle className="line-clamp-1">{deck.name}</CardTitle>
+                      <CardDescription className="line-clamp-2">
+                        {deck.description || "No description"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-muted-foreground">
+                        Updated {new Date(deck.updatedAt).toLocaleDateString()}
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {activity.time}
-                      </p>
-                    </div>
-                  </div>
-                  {index < recentActivity.length - 1 && <Separator className="mt-4" />}
-                </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       </div>
     </div>
   );

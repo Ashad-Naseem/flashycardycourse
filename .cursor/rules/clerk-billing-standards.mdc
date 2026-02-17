@@ -1,0 +1,252 @@
+---
+description: Clerk Billing standards for subscription management and feature protection
+alwaysApply: true
+---
+
+# Clerk Billing Standards
+
+This app uses Clerk Billing to handle subscriptions and payments. All billing-related functionality must follow these patterns for consistency and security.
+
+## Available Plans & Features
+
+**Plans:**
+- `free_user` - Free tier with limited features
+- `pro` - Premium tier with full access
+
+**Features:**
+- `3_deck_limit` - Restricts users to 3 decks maximum (free plan)
+- `unlimited_decks` - Allows unlimited deck creation (pro plan)
+- `ai_flashcard_generation` - AI-powered flashcard creation (pro plan)
+
+## Access Control Patterns
+
+### Use `has()` Method for Server-Side Protection
+
+```tsx
+// ✅ GOOD - Server Component checking for plan
+import { auth } from "@clerk/nextjs";
+
+export default async function DashboardPage() {
+  const { userId, has } = auth();
+  if (!userId) redirect("/sign-in");
+  
+  const hasProAccess = has({ plan: "pro" });
+  const hasUnlimitedDecks = has({ feature: "unlimited_decks" });
+  const hasAIGeneration = has({ feature: "ai_flashcard_generation" });
+  
+  return (
+    <div>
+      {hasProAccess && <ProFeatures />}
+      {hasAIGeneration && <AIGenerationButton />}
+    </div>
+  );
+}
+
+// ✅ GOOD - Server Action with feature check
+"use server";
+import { auth } from "@clerk/nextjs";
+
+export async function createDeckAction(data: CreateDeckData) {
+  const { userId, has } = auth();
+  if (!userId) throw new Error("Unauthorized");
+  
+  // Check if user can create unlimited decks
+  const hasUnlimitedDecks = has({ feature: "unlimited_decks" });
+  
+  if (!hasUnlimitedDecks) {
+    const userDecks = await getUserDecks(userId);
+    if (userDecks.length >= 3) {
+      throw new Error("Free users are limited to 3 decks. Upgrade to Pro for unlimited decks.");
+    }
+  }
+  
+  return await createDeck(userId, data);
+}
+```
+
+### Use `<Protect>` Component for Client-Side UI Protection
+
+```tsx
+// ✅ GOOD - Protecting UI elements with plan check
+import { Protect } from "@clerk/nextjs";
+
+export function DeckActions({ deckId }: { deckId: string }) {
+  return (
+    <div className="flex gap-2">
+      <Button>Edit Deck</Button>
+      
+      <Protect 
+        plan="pro"
+        fallback={
+          <Button variant="outline" disabled>
+            AI Generation (Pro Only)
+          </Button>
+        }
+      >
+        <AIGenerateCardsButton deckId={deckId} />
+      </Protect>
+    </div>
+  );
+}
+
+// ✅ GOOD - Protecting with feature check
+import { Protect } from "@clerk/nextjs";
+
+export function CreateDeckButton() {
+  return (
+    <Protect
+      feature="unlimited_decks"
+      fallback={<UpgradePrompt featureNeeded="unlimited deck creation" />}
+    >
+      <Button>+ Create New Deck</Button>
+    </Protect>
+  );
+}
+
+// ✅ GOOD - Multiple protection levels
+export function DashboardHeader() {
+  return (
+    <div className="flex justify-between items-center">
+      <h1>My Flashcard Decks</h1>
+      
+      <div className="flex gap-2">
+        {/* Always visible */}
+        <Button variant="outline">View Decks</Button>
+        
+        {/* Pro plan only */}
+        <Protect 
+          plan="pro"
+          fallback={<ProUpgradeButton />}
+        >
+          <Button>+ Create Deck</Button>
+        </Protect>
+      </div>
+    </div>
+  );
+}
+```
+
+### Client-Side Hooks for Dynamic UI
+
+```tsx
+// ✅ GOOD - Using useAuth hook for dynamic content
+"use client";
+import { useAuth } from "@clerk/nextjs";
+
+export function DeckLimitIndicator() {
+  const { isLoaded, has } = useAuth();
+  
+  if (!isLoaded) return <div>Loading...</div>;
+  
+  const hasUnlimitedDecks = has({ feature: "unlimited_decks" });
+  const hasProPlan = has({ plan: "pro" });
+  
+  if (hasUnlimitedDecks) {
+    return <Badge variant="secondary">Unlimited Decks</Badge>;
+  }
+  
+  return (
+    <div className="flex items-center gap-2">
+      <Badge variant="outline">3 Deck Limit</Badge>
+      <Button size="sm" variant="link" onClick={() => window.open('/pricing', '_blank')}>
+        Upgrade to Pro
+      </Button>
+    </div>
+  );
+}
+```
+
+## Pricing Page Implementation
+
+```tsx
+// ✅ GOOD - Dedicated pricing page
+import { PricingTable } from "@clerk/nextjs";
+
+export default function PricingPage() {
+  return (
+    <div className="container mx-auto py-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold text-center mb-8">
+          Choose Your Plan
+        </h1>
+        <PricingTable />
+      </div>
+    </div>
+  );
+}
+```
+
+## Error Handling for Billing Limits
+
+```tsx
+// ✅ GOOD - Graceful limit enforcement
+export async function createCardAction(data: CreateCardData) {
+  const { userId, has } = auth();
+  if (!userId) throw new Error("Unauthorized");
+  
+  const hasAIGeneration = has({ feature: "ai_flashcard_generation" });
+  
+  if (data.useAI && !hasAIGeneration) {
+    throw new Error("AI flashcard generation requires a Pro subscription. Please upgrade your plan.");
+  }
+  
+  return await createCard(userId, data);
+}
+
+// ✅ GOOD - User-friendly upgrade prompts
+export function UpgradePrompt({ featureNeeded }: { featureNeeded: string }) {
+  return (
+    <Card className="p-4 border-amber-200 bg-amber-50">
+      <CardContent>
+        <div className="flex items-center gap-3">
+          <Crown className="h-5 w-5 text-amber-600" />
+          <div>
+            <p className="font-medium text-amber-800">Pro Feature Required</p>
+            <p className="text-sm text-amber-700">
+              Upgrade to Pro to unlock {featureNeeded}
+            </p>
+          </div>
+          <Button size="sm" asChild>
+            <Link href="/pricing">Upgrade</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+## Common Usage Patterns
+
+### Deck Creation Limits
+- Free users: Check deck count before allowing creation
+- Pro users: Allow unlimited deck creation
+- Always show current plan status in UI
+
+### AI Features
+- Only show AI generation buttons to Pro users
+- Gracefully handle AI requests from free users
+- Provide clear upgrade paths
+
+### Navigation & UI States
+- Use `<Protect>` for conditional rendering
+- Use `has()` for server-side logic
+- Always provide fallback UI for restricted features
+
+## Rules Summary
+
+1. **Server-side protection**: Use `has()` method in Server Components and Actions
+2. **Client-side protection**: Use `<Protect>` component with fallbacks
+3. **Plan checks**: `has({ plan: "pro" })` or `has({ plan: "free_user" })`
+4. **Feature checks**: `has({ feature: "unlimited_decks" })`, etc.
+5. **Error messages**: Provide clear upgrade prompts for billing limits
+6. **Graceful degradation**: Always show what's available, hide what's not
+7. **Consistent patterns**: Use same protection patterns across the app
+
+## Enforcement Checklist
+
+- ✅ All premium features protected with `<Protect>` or `has()`
+- ✅ Server Actions validate permissions before database operations
+- ✅ Clear upgrade prompts for restricted features
+- ✅ Consistent error messages mentioning specific plans/features
+- ✅ Billing limits enforced server-side for security

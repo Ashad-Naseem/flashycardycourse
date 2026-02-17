@@ -1,9 +1,19 @@
 ---
 alwaysApply: true
 ---
-# shadcn/ui Standards
+# shadcn/ui Standards - STRICT ENFORCEMENT
 
-This project uses **shadcn/ui** for all UI components.
+This project uses **shadcn/ui EXCLUSIVELY** for ALL UI components. **ABSOLUTELY NO CUSTOM UI COMPONENTS ARE ALLOWED**.
+
+## 🚫 ZERO TOLERANCE POLICY
+
+**RULE**: Every UI element MUST use a shadcn/ui component. If a shadcn/ui component exists for your use case, you MUST use it. If it doesn't exist, install it first.
+
+**NO EXCEPTIONS**: 
+- No custom buttons, cards, inputs, modals, dialogs, or any UI elements
+- No custom Tailwind CSS classes for layout or styling without shadcn/ui
+- No HTML elements styled with custom classes (button, div, span, etc.)
+- No custom form components
 
 ## Setup Commands
 
@@ -12,43 +22,123 @@ This project uses **shadcn/ui** for all UI components.
 npx shadcn@latest init
 ```
 
-### Add specific components as needed
+### Essential Components - Install These First
 ```bash
 npx shadcn@latest add button
 npx shadcn@latest add card
 npx shadcn@latest add input
+npx shadcn@latest add dialog
+npx shadcn@latest add form
+npx shadcn@latest add label
+npx shadcn@latest add textarea
+npx shadcn@latest add select
+npx shadcn@latest add badge
+npx shadcn@latest add alert
 ```
 
-## Usage Guidelines
+### Install ANY component you need
+```bash
+npx shadcn@latest add [component-name]
+```
 
-- **Always use shadcn/ui components** instead of custom UI elements
-- Check if a component exists in shadcn/ui before creating custom components
-- Install missing components using the `npx shadcn@latest add [component]` command
-- Components are installed to `src/components/ui/` and can be imported directly
+## MANDATORY Usage Rules
 
-## Example
+1. **BEFORE** creating any UI element, check shadcn/ui documentation
+2. **INSTALL** the required shadcn/ui component if not already added
+3. **USE ONLY** shadcn/ui components - never create custom alternatives
+4. **COMPOSITION**: Combine multiple shadcn/ui components instead of creating custom ones
+
+## Clerk Authentication - MUST USE shadcn/ui
+
+**Clerk sign-in/sign-up buttons MUST use shadcn/ui Button component with modal triggers:**
 
 ```tsx
-// ✅ GOOD - Use shadcn/ui components
+// ✅ REQUIRED - Clerk with shadcn/ui Button and Dialog
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
+import { SignIn, SignUp } from "@clerk/nextjs"
 
-export function MyComponent() {
+export function AuthButtons() {
+  return (
+    <>
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button variant="default">Sign In</Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <SignIn />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button variant="outline">Sign Up</Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <SignUp />
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+// ❌ FORBIDDEN - Custom button for Clerk
+<button onClick={() => signIn()}>Sign In</button>
+<div className="auth-button">Sign Up</div>
+```
+
+## Required Examples
+
+```tsx
+// ✅ MANDATORY - Always use shadcn/ui components
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
+
+export function FlashcardForm() {
   return (
     <Card>
-      <Button>Click me</Button>
+      <CardHeader>
+        <CardTitle>Create Flashcard</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label htmlFor="question">Question</Label>
+          <Input id="question" placeholder="Enter question" />
+        </div>
+        <Button type="submit">Save Flashcard</Button>
+      </CardContent>
     </Card>
   )
 }
 
-// ❌ AVOID - Creating custom UI from scratch
-export function MyComponent() {
+// ❌ ABSOLUTELY FORBIDDEN - Any custom UI
+export function FlashcardForm() {
   return (
-    <div className="border rounded p-4">
-      <button className="bg-blue-500 text-white px-4 py-2">
-        Click me
+    <div className="border rounded-lg p-6"> {/* Custom card - FORBIDDEN */}
+      <h2 className="text-xl font-bold">Create Flashcard</h2> {/* Custom header - FORBIDDEN */}
+      <input className="border px-3 py-2 rounded" /> {/* Custom input - FORBIDDEN */}
+      <button className="bg-blue-500 text-white px-4 py-2 rounded"> {/* Custom button - FORBIDDEN */}
+        Save
       </button>
     </div>
   )
 }
 ```
+
+## Common shadcn/ui Components You MUST Use
+
+- **Buttons**: `Button` (never use HTML `<button>`)
+- **Forms**: `Input`, `Label`, `Textarea`, `Select` (never custom form elements)
+- **Layout**: `Card`, `CardContent`, `CardHeader` (never custom divs with borders)
+- **Modals**: `Dialog`, `DialogContent`, `DialogTrigger` (never custom modals)
+- **Navigation**: `NavigationMenu` (never custom nav)
+- **Feedback**: `Alert`, `Badge`, `Toast` (never custom alerts)
+
+## Component Installation Reference
+
+Visit https://ui.shadcn.com/docs/components to see all available components and install what you need.
+
+**Remember**: If you need a UI element, shadcn/ui probably has it. Install and use it instead of creating custom alternatives.
